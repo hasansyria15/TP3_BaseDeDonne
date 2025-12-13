@@ -1,74 +1,111 @@
 -- TRG_PROJET_BEFORE_INSERT
-CREATE OR REPLACE TRIGGER trg_projet_before_insert
-BEFORE INSERT ON projet
+CREATE OR REPLACE TRIGGER TRG_PROJET_BEFORE_INSERT
+BEFORE INSERT ON PROJET
 FOR EACH ROW
 BEGIN
     IF :NEW.budget <= 0 THEN
-        RAISE_APPLICATION_ERROR(-20010, 'Budget invalide');
+        RAISE_APPLICATION_ERROR(-20010, 'Budget invalide: le budget ne peut pas être inférieur à 0');
     END IF;
 
     IF :NEW.date_fin < :NEW.date_debut THEN
-        RAISE_APPLICATION_ERROR(-20020, 'Dates invalides');
+        RAISE_APPLICATION_ERROR(-20020, 'Dates invalides: La date de fin ne peut pas être plus petite que celle de début');
     END IF;
 END;
 /
 
 -- TRG_AFFECTATION_BEFORE_INSERT
-CREATE OR REPLACE TRIGGER trg_affectation_before_insert
-BEFORE INSERT ON affectation_equip
+CREATE OR REPLACE TRIGGER TRG_AFFECTATION_BEFORE_INSERT
+BEFORE INSERT ON AFFECTATION_EQUIP
 FOR EACH ROW
 DECLARE
-    v_etat_equip equipement.etat%TYPE;
+    v_etat EQUIPEMENT.etat%TYPE;
 BEGIN
-    SELECT etat INTO v_etat_equip
-    FROM equipement
+    SELECT etat INTO v_etat
+    FROM EQUIPEMENT
     WHERE id_equipement = :NEW.id_equipement;
 
-    IF v_etat_equip <> 'Disponible' THEN
+    IF v_etat != 'DISPONIBLE' THEN
         RAISE_APPLICATION_ERROR(-20030, 'Equipement non disponible');
     END IF;
 END;
 /
 
-
 -- TRG_AFFECTATION_AFTER_INSERT
-CREATE OR REPLACE TRIGGER trg_affectation_after_insert
-AFTER INSERT ON affectation_equip
+CREATE OR REPLACE TRIGGER TRG_AFFECTATION_AFTER_INSERT
+AFTER INSERT ON AFFECTATION_EQUIP
 FOR EACH ROW
 BEGIN
-    UPDATE equipement
-    SET etat = 'Occupe'
+    UPDATE EQUIPEMENT
+    SET etat = 'En maintenance'
     WHERE id_equipement = :NEW.id_equipement;
 END;
 /
 
 -- TRG_AFFECTATION_AFTER_DELETE
-CREATE OR REPLACE TRIGGER trg_affectation_after_delete
-AFTER DELETE ON affectation_equip
+CREATE OR REPLACE TRIGGER TRG_AFFECTATION_AFTER_DELETE
+AFTER DELETE ON AFFECTATION_EQUIP
 FOR EACH ROW
 BEGIN
-    UPDATE equipement
+    UPDATE EQUIPEMENT
     SET etat = 'Disponible'
     WHERE id_equipement = :OLD.id_equipement;
 END;
 /
 
+-- SEQUENCE POUR LOG_OPERATION
+CREATE SEQUENCE SEQ_LOG
+START WITH 1
+INCREMENT BY 1;
+/
+
 -- TRG_EXPERIENCE_AFTER_INSERT
-CREATE OR REPLACE TRIGGER trg_experience_after_insert
-AFTER INSERT ON experience
+CREATE OR REPLACE TRIGGER TRG_EXPERIENCE_AFTER_INSERT
+AFTER INSERT ON EXPERIENCE
 FOR EACH ROW
 BEGIN
-    INSERT INTO log_operation
-    VALUES (seq_log.NEXTVAL, 'EXPERIENCE', 'INSERT', USER, SYSDATE, NULL);
+    INSERT INTO LOG_OPERATION
+        (id_log, table_concernee, operation, utilisateur, date_op, description)
+    VALUES
+        (SEQ_LOG.NEXTVAL, 'EXPERIENCE', 'INSERT', USER, SYSDATE,­­'Insertion dans la table EXPERIENCE');
+END;
+/
+
+
+-- TRG_ECHANTILLON_BEFORE_INSERT
+CREATE OR REPLACE TRIGGER TRG_ECHANTILLON_BEFORE_INSERT
+BEFORE INSERT ON ECHANTILLON
+FOR EACH ROW
+DECLARE
+    v_date_realisation EXPERIENCE.date_realisation%TYPE;
+BEGIN
+    SELECT date_realisation INTO v_date_realisation
+    FROM EXPERIENCE
+    WHERE id_exp = :NEW.id_exp;
+
+    IF :NEW.date_prelevement < v_date_realisation THEN
+        RAISE_APPLICATION_ERROR(-20040, 'Date de prelevement invalide');
+    END IF;
 END;
 /
 
 -- TRG_LOG_BEFORE_INSERT
-CREATE OR REPLACE TRIGGER trg_log_before_insert
-BEFORE INSERT ON log_operation
+CREATE OR REPLACE TRIGGER TRG_LOG_BEFORE_INSERT
+BEFORE INSERT ON LOG_OPERATION
 FOR EACH ROW
 BEGIN
     :NEW.operation := UPPER(:NEW.operation);
     :NEW.date_op := NVL(:NEW.date_op, SYSDATE);
+END;
+/
+
+-- TRG_SECURITE_AFTER_UPDATE
+CREATE OR REPLACE TRIGGER TRG_SECURITE_AFTER_UPDATE
+AFTER UPDATE ON CHERCHEUR
+FOR EACH ROW
+BEGIN
+    INSERT INTO LOG_OPERATION
+        (id_log, table_concernee, operation, utilisateur, date_op, description)
+    VALUES
+        (SEQ_LOG.NEXTVAL, 'CHERCHEUR', 'UPDATE', USER, SYSDATE,'Modification de la table CHERCHEUR');
 END;
 /
