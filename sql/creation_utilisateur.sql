@@ -12,16 +12,16 @@ create user gest_lab identified by GestLab#2025
    quota unlimited on users;
 
 --lecteur
-create user lect_lab identified by LectLab#2025
+create user lect_lab identified by lectlab#2025
    default tablespace users
    temporary tablespace temp
    quota unlimited on users;
 
 --Creation des roles
-CREATE ROLE role_lab_admin;
-CREATE ROLE role_lab_gest;
-CREATE ROLE role_lab_lect;
-CREATE ROLE role_lab_research;
+create role role_lab_admin;
+create role role_lab_gest;
+create role role_lab_lect;
+create role role_lab_research;
 
 
 -- Droits de connexion
