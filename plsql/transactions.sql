@@ -1,8 +1,8 @@
 CREATE OR REPLACE PROCEDURE planifier_experience (
-    p_id_projet     IN NUMBER,
-    p_titre_exp     IN VARCHAR2,
-    p_date_real     IN DATE,
-    p_id_equipement IN NUMBER
+    p_id_projet     NUMBER,
+    p_titre_exp     VARCHAR2,
+    p_date_real     DATE,
+    p_id_equipement NUMBER
 ) IS
     v_id_exp EXPERIENCE.id_exp%TYPE;
 BEGIN

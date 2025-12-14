@@ -4,11 +4,11 @@ BEFORE INSERT ON PROJET
 FOR EACH ROW
 BEGIN
     IF :NEW.budget <= 0 THEN
-        RAISE_APPLICATION_ERROR(-20010, 'Budget invalide: le budget ne peut pas être inférieur à 0');
+        RAISE_APPLICATION_ERROR(-20010, 'Budget invalide: le budget ne peut pas ï¿½tre infï¿½rieur ï¿½ 0');
     END IF;
 
     IF :NEW.date_fin < :NEW.date_debut THEN
-        RAISE_APPLICATION_ERROR(-20020, 'Dates invalides: La date de fin ne peut pas être plus petite que celle de début');
+        RAISE_APPLICATION_ERROR(-20020, 'Dates invalides: La date de fin ne peut pas ï¿½tre plus petite que celle de dï¿½but');
     END IF;
 END;
 /
@@ -66,7 +66,7 @@ BEGIN
     INSERT INTO LOG_OPERATION
         (id_log, table_concernee, operation, utilisateur, date_op, description)
     VALUES
-        (SEQ_LOG.NEXTVAL, 'EXPERIENCE', 'INSERT', USER, SYSDATE,­­'Insertion dans la table EXPERIENCE');
+        (SEQ_LOG.NEXTVAL, 'EXPERIENCE', 'INSERT', USER, SYSDATE,'Insertion dans la table EXPERIENCE');
 END;
 /
 

@@ -30,11 +30,11 @@
 */
 create or replace procedure rapport_projets_par_chercheur (
    p_id_chercheur chercheur.id_chercheur%type
-) as
+) is
    v_nom              chercheur.nom%type;
    v_prenom           chercheur.prenom%type;
-   v_budget_total     number := 0;
-   v_nb_projets       number := 0;
+   v_budget_total     number;
+   v_nb_projets       number;
    v_chercheur_existe number;
 begin
    -- Vérifier que le chercheur existe
@@ -73,6 +73,7 @@ begin
                         || p_id_chercheur || ')');
    dbms_output.put_line('================================================================');
    dbms_output.put_line('');
+   -- Resultat : Prenom Nom (ID: X)
 
    -- Utiliser un curseur implicite (FOR loop) pour parcourir les projets
    for rec_projet in (
@@ -166,15 +167,203 @@ end rapport_projets_par_chercheur;
 /
 
 
--- Fonction retourn les équipements par état en tableau record
-create or replace function statistiques_equipements return sys_refcursor is
+/*
+  Fonction : STATISTIQUES_EQUIPEMENTS
+
+  Objectif :
+    Retourner le nombre d'équipements par état (Disponible, En maintenance, etc.)
+    Retourne un tableau de RECORD.
+
+  Retour :
+    Tableau de RECORD contenant pour chaque état :
+    - etat : État de l'équipement
+    - nombre : Nombre d'équipements dans cet état
+*/
+create or replace function statistiques_equipements return sys_refcursor as
+   -- Définir le TYPE RECORD
+   type t_stat_rec is record (
+         etat   equipement.etat%type,
+         nombre number
+   );
+
+   -- Définir le TYPE TABLE OF RECORD
+   type t_stats_tab is
+      table of t_stat_rec index by pls_integer;
+   v_stats  t_stats_tab;
    v_cursor sys_refcursor;
 begin
+   -- Ouvrir le curseur avec les statistiques
    open v_cursor for select etat,
-                            count(*) as nb_equipements
+                            count(*) as nombre
                                          from equipement
                       group by etat
-                      order by etat;
+                      order by nombre desc;
+
    return v_cursor;
 end statistiques_equipements;
+/
+
+/*
+  Procédure : RAPPORT_ACTIVITE_PROJETS
+
+  Objectif :
+    Afficher le nombre d'expériences réalisées par projet et leur taux
+    de réussite. Appelle la fonction moyenne_mesures_experience.
+
+  Sortie :
+    Affichage via DBMS_OUTPUT :
+    - Nom du projet
+    - Nombre d'expériences
+    - Nombre d'expériences terminées
+    - Taux de réussite
+    - Moyenne des mesures
+
+  Utilisation :
+    SET SERVEROUTPUT ON;
+    EXEC rapport_activite_projets();
+*/
+create or replace procedure rapport_activite_projets as
+   v_nb_experiences  number;
+   v_nb_terminees    number;
+   v_taux_reussite   number;
+   v_moyenne_mesures number;
+begin
+   dbms_output.put_line('================================================================');
+   dbms_output.put_line('  RAPPORT D''ACTIVITÉ DES PROJETS');
+   dbms_output.put_line('================================================================');
+   dbms_output.put_line('');
+
+   -- Curseur implicite pour parcourir les projets
+   for rec_projet in (
+      select p.id_projet,
+             p.titre,
+             p.domaine,
+             count(e.id_exp) as nb_experiences
+        from projet p
+        left join experience e
+      on p.id_projet = e.id_projet
+       group by p.id_projet,
+                p.titre,
+                p.domaine
+       order by p.titre
+   ) loop
+      -- Compter les expériences terminées
+      select count(*)
+        into v_nb_terminees
+        from experience
+       where id_projet = rec_projet.id_projet
+         and statut = 'Terminée';
+
+      -- Calculer le taux de réussite
+      if rec_projet.nb_experiences > 0 then
+         v_taux_reussite := round(
+            v_nb_terminees * 100.0 / rec_projet.nb_experiences,
+            2
+         );
+      else
+         v_taux_reussite := 0;
+      end if;
+
+      -- Afficher les informations du projet
+      dbms_output.put_line('Projet: ' || rec_projet.titre);
+      dbms_output.put_line('  Domaine            : ' || rec_projet.domaine);
+      dbms_output.put_line('  Expériences totales: ' || rec_projet.nb_experiences);
+      dbms_output.put_line('  Expériences terminées: ' || v_nb_terminees);
+      dbms_output.put_line('  Taux de réussite   : '
+                           || v_taux_reussite || '%');
+
+      -- Afficher la moyenne des mesures pour chaque expérience
+      if rec_projet.nb_experiences > 0 then
+         dbms_output.put_line('  Expériences:');
+         for rec_exp in (
+            select id_exp,
+                   titre_exp,
+                   statut
+              from experience
+             where id_projet = rec_projet.id_projet
+         ) loop
+            begin
+               v_moyenne_mesures := moyenne_mesures_experience(rec_exp.id_exp);
+               dbms_output.put_line('    - '
+                                    || rec_exp.titre_exp
+                                    || ' ('
+                                    || rec_exp.statut
+                                    || ') : Moyenne = ' || round(
+                  v_moyenne_mesures,
+                  2
+               ));
+            exception
+               when others then
+                  dbms_output.put_line('    - '
+                                       || rec_exp.titre_exp
+                                       || ' ('
+                                       || rec_exp.statut || ') : Pas de mesures');
+            end;
+         end loop;
+      end if;
+
+      dbms_output.put_line('----------------------------------------------------------------');
+   end loop;
+
+   dbms_output.put_line('================================================================');
+end rapport_activite_projets;
+/
+
+/*
+  Fonction : BUDGET_MOYEN_PAR_DOMAINE
+
+  Objectif :
+    Calculer le budget moyen par domaine scientifique.
+    Utilise une table PL/SQL en mémoire (TABLE OF RECORD).
+
+  Retour :
+    SYS_REFCURSOR contenant les budgets moyens par domaine
+*/
+create or replace function budget_moyen_par_domaine return sys_refcursor as
+   -- Définir le TYPE RECORD pour stocker les budgets par domaine
+   type t_budget_rec is record (
+         domaine      projet.domaine%type,
+         budget_moyen number,
+         nb_projets   number
+   );
+
+   -- Définir le TYPE TABLE OF RECORD (table PL/SQL en mémoire)
+   type t_budgets_tab is
+      table of t_budget_rec index by pls_integer;
+
+   -- Déclarer la table en mémoire
+   v_budgets t_budgets_tab;
+   v_index   pls_integer;
+   v_cursor  sys_refcursor;
+begin
+   -- Remplir la table PL/SQL en mémoire
+   for rec in (
+      select domaine,
+             avg(budget) as budget_moyen,
+             count(*) as nb_projets
+        from projet
+       where budget is not null
+       group by domaine
+       order by budget_moyen desc
+   ) loop
+      v_budgets(v_index).domaine := rec.domaine;
+      v_budgets(v_index).budget_moyen := rec.budget_moyen;
+      v_budgets(v_index).nb_projets := rec.nb_projets;
+      v_index := v_index + 1;
+   end loop;
+
+   -- Retourner un curseur avec les données de la table en mémoire
+   open v_cursor for select domaine,
+                            round(
+                                        avg(budget),
+                                        2
+                                     ) as budget_moyen,
+                            count(*) as nb_projets
+                                       from projet
+                     where budget is not null
+                     group by domaine
+                     order by budget_moyen desc;
+
+   return v_cursor;
+end budget_moyen_par_domaine;
 /
